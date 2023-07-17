@@ -2,10 +2,25 @@ variable "policy_id" {
   type = string  
 }
 
+data "aws_caller_identity" "me" {}
+
 data "archive_file" "function_zip" {
   type        = "zip"
   source_dir  = "../lambda/authorizer"
   output_path = "./modules/lambda/authorizer.zip"
+}
+
+data "archive_file" "layer_zip" {
+  type        = "zip"
+  source_dir  = "../lambda/boto3_layer"
+  output_path = "./modules/lambda/layer.zip"
+}
+
+resource "aws_lambda_layer_version" "boto3" {
+  filename   = "${data.archive_file.layer_zip.output_path}"
+  layer_name = "boto3"
+  source_code_hash = "${data.archive_file.layer_zip.output_base64sha256}"
+  compatible_runtimes = ["python3.9"]
 }
 
 resource "aws_lambda_function" "authorizer" {
@@ -13,7 +28,7 @@ resource "aws_lambda_function" "authorizer" {
   function_name = "api_gateway_authorizer"
   role          = aws_iam_role.lambda.arn
   handler       = "src.index.lambda_handler"
-  runtime       = "python3.7"
+  runtime       = "python3.9"
   timeout       = 20
   source_code_hash = "${data.archive_file.function_zip.output_base64sha256}"
 
@@ -22,20 +37,16 @@ resource "aws_lambda_function" "authorizer" {
       POLICY_ID = var.policy_id
     }
   }
-
-  layers = ["${aws_lambda_layer_version.authzed.arn}"]
-
   
-  vpc_config {
-    subnet_ids = [var.subnet_id]
-    security_group_ids = [var.security_group_id]
-  }
+  layers = [aws_lambda_layer_version.boto3.arn]
+  
 }
 
 resource "aws_iam_role" "lambda" {
-  name = "demo-lambda"
-  managed_policy_arns = ["arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"]
+  name = "lambda-authorizer-role"
   
+  managed_policy_arns = ["arn:aws:iam::aws:policy/AWSLambdaExecute"]
+
   assume_role_policy = <<EOF
 {
   "Version": "2012-10-17",
@@ -54,19 +65,19 @@ resource "aws_iam_role" "lambda" {
 EOF
 }
 
-resource "aws_iam_role_policy" "acm_policy" {
-  name = "default"
+resource "aws_iam_role_policy" "verified_permissions_policy" {
+  name = "access_verified_permissions"
   role = aws_iam_role.lambda.id
 
   policy = <<EOF
 {
   "Version": "2012-10-17",
   "Statement": [
-    {
-      "Action": "acm:GetCertificate",
-      "Effect": "Allow",
-      "Resource": "*"
-    }
+		{
+			"Effect": "Allow",
+			"Action": "verifiedpermissions:IsAuthorizedWithToken",
+			"Resource": "arn:aws:verifiedpermissions::${data.aws_caller_identity.me.account_id}:policy-store/*"
+		}
   ]
 }
 EOF

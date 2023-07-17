@@ -16,7 +16,7 @@ paths:
           description: "200 response"
           content: {}
       security:
-      - spicedb-authorizer: []
+      - verifiedpermissions-authorizer: []
       x-amazon-apigateway-integration:
         responses:
           default:
@@ -28,6 +28,39 @@ paths:
           application/json: "{\"statusCode\": 200}"
         passthroughBehavior: "when_no_match"
         type: "mock"
+
+    put:
+      parameters:
+      - name: "blogId"
+        in: "path"
+        required: true
+        schema:
+          type: "string"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: "object"
+              properties:
+                content:
+                  type: "string"
+      responses:
+        "200":
+          description: "200 response"
+          content: {}
+      security:
+      - verifiedpermissions-authorizer: []
+      x-amazon-apigateway-integration:
+        responses:
+          default:
+            statusCode: "200"
+            responseTemplates:
+              application/json: "{\n \"message\": \"blog update scceeded.\" \n}"
+        requestTemplates:
+          application/json: "{\"statusCode\": 200}"
+        passthroughBehavior: "when_no_match"
+        type: "mock"
+
 
 components:
   securitySchemes:
